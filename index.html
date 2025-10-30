@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Base64 JSON Viewer — Mobile + Desktop Stacked</title>
+    <style>
+      :root {
+        --accent: #009a9b;
+        --bg: #fff;
+        --muted: #706f6f;
+        --card-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+        --radius: 12px;
+        --gap: 12px;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: Inter, "Segoe UI", Roboto, system-ui, -apple-system,
+          "Helvetica Neue", Arial;
+        background: linear-gradient(180deg, #f7fbfb 0%, #ffffff 100%);
+        color: #222;
+        padding: 16px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        align-items: center;
+      }
+      .top {
+        width: 100%;
+        max-width: 1100px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .company-logo {
+        width: 86px;
+        height: auto;
+        border-radius: 8px;
+        flex: 0 0 86px;
+        object-fit: contain;
+      }
+      h1 {
+        font-size: 1.05rem;
+        margin: 0;
+        color: var(--accent);
+      }
+      .controls {
+        width: 100%;
+        max-width: 1100px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .controls .left {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .controls .right {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+      button,
+      .btn {
+        background: var(--bg);
+        border: 1px solid #e6e6e6;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        box-shadow: none;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+      }
+      input[type="search"] {
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #e9e9e9;
+        min-width: 180px;
+      }
+
+      /* STACKED layout for both desktop & mobile — avoids adjacent resizing when one card expands */
+      .viewer-wrap {
+        width: 100%;
+        max-width: 1100px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      /* Modern single-column list of cards */
+      .json-viewer {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap);
+      }
+
+      .json-card {
+        background: var(--bg);
+        border-radius: var(--radius);
+        box-shadow: var(--card-shadow);
+        padding: 12px;
+        border: 1px solid #eef7f7;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        word-break: break-word;
+      }
+
+      /* Card header — full-width clickable */
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        padding: 6px;
+        border-radius: 8px;
+      }
+      .card-header:focus {
+        outline: 2px solid rgba(0, 154, 155, 0.14);
+      }
+      .key {
+        font-weight: 700;
+        color: var(--accent);
+        font-size: 0.98rem;
+        flex-shrink: 0; /* prevent it from shrinking too much */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .meta {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      /* Expand/collapse button (chevron) */
+      .chev {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        border: 1px solid transparent;
+      }
+      .chev svg {
+        width: 16px;
+        height: 16px;
+        transform: rotate(0deg);
+        transition: transform 220ms ease;
+      }
+      .chev[aria-expanded="true"] svg {
+        transform: rotate(90deg);
+      }
+
+      .val {
+        color: #333;
+        font-size: 0.92rem;
+        overflow-wrap: anywhere;
+      }
+
+      /* Collapsible content animation by transitioning max-height */
+      .collapse {
+        overflow: hidden;
+        max-height: 0;
+        transition: max-height 260ms ease;
+        padding-left: 8px;
+        border-left: 3px solid #f0fbfb;
+      }
+      .collapse.open {
+        max-height: 2000px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .badge {
+        font-size: 0.75rem;
+        padding: 4px 6px;
+        border-radius: 999px;
+        background: #f1fbfb;
+        color: var(--accent);
+        border: 1px solid #e6f2f2;
+      }
+
+      .nested-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px;
+        border: 1px solid #f1f6f6;
+        box-shadow: none;
+      }
+
+      .raw-panel {
+        width: 100%;
+        max-height: 70vh;
+        overflow: auto;
+        border-radius: 12px;
+        padding: 12px;
+        border: 1px solid #e6e6e6;
+        background: #fff;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+        font-family: "Courier New", monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .key-token {
+        color: var(--accent);
+      }
+      .string {
+        color: #5b6161;
+      }
+      .number {
+        color: #333;
+      }
+      .boolean {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .null {
+        color: #b3b3b3;
+      }
+
+      @media (max-width: 420px) {
+        input[type="search"] {
+          min-width: 120px;
+        }
+        button,
+        .btn {
+          padding: 10px 12px;
+          font-size: 0.95rem;
+        }
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .error {
+        color: #f14e4e;
+        font-weight: 700;
+      }
+
+      .val {
+        color: #333;
+        font-size: 0.92rem;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        max-width: 100%;
+        overflow-x: auto;
+        white-space: pre-wrap; /* default for most values */
+      }
+
+      /* Detect long unbroken text (like URLs) and force horizontal scroll */
+      .val.long {
+        white-space: nowrap;
+        overflow-x: auto;
+        display: block;
+      }
+
+      /* Optional scrollbar styling for mobile */
+      .val::-webkit-scrollbar {
+        height: 6px;
+      }
+      .val::-webkit-scrollbar-thumb {
+        background: #d5e9e9;
+        border-radius: 3px;
+      }
+
+      .keyval-line {
+        display: flex;
+        justify-content: space-between; /* pushes key left, value right */
+        align-items: baseline;
+        gap: 12px; /* optional spacing */
+      }
+
+      .keyval-line .key {
+        flex-shrink: 0; /* key keeps its width */
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .keyval-line .val {
+        flex-grow: 1; /* value takes remaining space */
+        color: #333;
+        text-align: left;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <!-- <img src="SAL.webp" alt="Company logo" class="company-logo" /> -->
+      <div>
+        <h1>Digital Product Passport — Viewer</h1>
+        <div class="muted">
+          Add <code>?key=BASE64STRING</code> to the URL. URL-safe base64
+          supported.
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="left">
+        <label style="display: flex; align-items: center; gap: 8px">
+          <input
+            id="search"
+            type="search"
+            placeholder="Search key or value"
+            aria-label="Search JSON"
+          />
+        </label>
+
+        <button id="copy-btn" class="btn" title="Copy pretty JSON">
+          📋 Copy
+        </button>
+        <button id="download-btn" class="btn" title="Download JSON file">
+          ⬇️ Download
+        </button>
+        <button id="toggle-raw" class="btn" title="Toggle raw JSON panel">
+          🗒 Raw
+        </button>
+      </div>
+      <div class="right">
+        <div id="status" class="muted">Waiting for <code>?key=...</code></div>
+      </div>
+    </div>
+
+    <div class="viewer-wrap">
+      <div id="modern-view" class="json-viewer" aria-live="polite"></div>
+
+      <pre id="raw" class="raw-panel" style="display: none">
+ℹ️ Raw JSON will appear here.</pre
+      >
+    </div>
+
+    <script>
+      // Utility: safe base64 decode supporting URL-safe base64 and unicode
+      function base64ToString(b64) {
+        const cleaned = b64
+          .replace(/\s+/g, "")
+          .replace(/-/g, "+")
+          .replace(/_/g, "/");
+        try {
+          const binary = atob(cleaned);
+          let percentEncoded = "";
+          for (let i = 0; i < binary.length; i++) {
+            const c = binary.charCodeAt(i);
+            percentEncoded += "%" + ("00" + c.toString(16)).slice(-2);
+          }
+          return decodeURIComponent(percentEncoded);
+        } catch (e) {
+          try {
+            return atob(cleaned);
+          } catch (x) {
+            throw new Error("Invalid Base64");
+          }
+        }
+      }
+
+      function syntaxHighlight(json) {
+        if (typeof json !== "string") json = JSON.stringify(json, null, 2);
+        return json
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(
+            /(\"(\\u[\\da-fA-F]{4}|\\[^u]|[^\\\"])*\"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+            function (match) {
+              let cls = "number";
+              if (/^\"/.test(match)) {
+                cls = /:$/.test(match) ? "key-token" : "string";
+              } else if (/true|false/.test(match)) {
+                cls = "boolean";
+              } else if (/null/.test(match)) {
+                cls = "null";
+              }
+              return '<span class="' + cls + '">' + match + "</span>";
+            }
+          );
+      }
+
+      // Create stacked modern view — each card can expand independently via an explicit chevron button
+      function createModernView(container, data) {
+        container.innerHTML = "";
+
+        if (typeof data !== "object" || data === null) {
+          const card = document.createElement("div");
+          card.className = "json-card";
+          const val = document.createElement("div");
+          val.className = "val";
+          val.textContent = String(data);
+          card.appendChild(val);
+          container.appendChild(card);
+          return;
+        }
+
+        Object.entries(data).forEach(([k, v]) => {
+          const card = document.createElement("div");
+          card.className = "json-card";
+
+          // Header
+          const header = document.createElement("div");
+          header.className = "card-header";
+          header.tabIndex = 0;
+
+          const keyEl = document.createElement("div");
+          keyEl.className = "key";
+          keyEl.textContent = k;
+          header.appendChild(keyEl);
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          if (Array.isArray(v))
+            meta.innerHTML = `<span class="badge">Array • ${v.length}</span>`;
+          else if (typeof v === "object" && v !== null)
+            meta.innerHTML = `<span class="badge">Object</span>`;
+          header.appendChild(meta);
+
+          const chev = document.createElement("button");
+          chev.className = "chev";
+          chev.setAttribute("aria-expanded", "false");
+          chev.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+          header.appendChild(chev);
+
+          const content = document.createElement("div");
+          content.className = "collapse";
+
+          chev.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleCollapse(content, chev);
+          });
+          header.addEventListener("click", () => {
+            toggleCollapse(content, chev);
+          });
+          header.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              toggleCollapse(content, chev);
+            }
+          });
+
+          card.appendChild(header);
+
+          // === flatten check for top-level ===
+          const isFlatObject =
+            typeof v === "object" &&
+            v !== null &&
+            !Array.isArray(v) &&
+            Object.values(v).every((x) => typeof x !== "object" || x === null);
+
+          if (isFlatObject) {
+            // render flattened key/values
+            Object.entries(v).forEach(([flatKey, flatVal]) => {
+              const line = document.createElement("div");
+              line.className = "keyval-line"; // use flex with space-between
+
+              const keySpan = document.createElement("div");
+              keySpan.className = "key";
+              keySpan.textContent = flatKey; // no colon, optional
+
+              const valSpan = document.createElement("div");
+              valSpan.className = "val";
+              valSpan.textContent = String(flatVal);
+
+              // if value is long unbroken text (like URL), keep your scrollable logic
+              if (
+                String(flatVal).length > 30 &&
+                !String(flatVal).includes(" ")
+              ) {
+                valSpan.classList.add("long");
+              }
+
+              line.appendChild(keySpan);
+              line.appendChild(valSpan);
+              content.appendChild(line);
+            });
+          } else if (Array.isArray(v)) {
+            if (v.length === 0) {
+              const e = document.createElement("div");
+              e.className = "val";
+              e.textContent = "[empty array]";
+              content.appendChild(e);
+            } else if (
+              v.every((item) => typeof item !== "object" || item === null)
+            ) {
+              const val = document.createElement("div");
+              val.className = "val";
+              val.textContent = v.join(", ");
+              content.appendChild(val);
+            } else {
+              v.forEach((item, idx) => {
+                const wrap = document.createElement("div");
+                wrap.className = "nested-card";
+                const label = document.createElement("div");
+                label.className = "meta";
+                label.textContent = `Index ${idx}`;
+                wrap.appendChild(label);
+                if (typeof item === "object" && item !== null) {
+                  createModernViewForParent(wrap, item);
+                } else {
+                  const vv = document.createElement("div");
+                  vv.className = "val";
+                  vv.textContent = String(item);
+                  wrap.appendChild(vv);
+                }
+                content.appendChild(wrap);
+              });
+            }
+          } else if (typeof v === "object" && v !== null) {
+            createModernViewForParent(content, v);
+          } else {
+            const val = document.createElement("div");
+            val.className = "val";
+            val.textContent = String(v);
+            content.appendChild(val);
+            chev.style.visibility = "hidden";
+          }
+
+          card.appendChild(content);
+          container.appendChild(card);
+        });
+      }
+
+      function createModernViewForParent(parent, data) {
+        Object.entries(data).forEach(([kk, vv]) => {
+          const mini = document.createElement("div");
+          mini.className = "json-card";
+
+          // header setup
+          const miniHeader = document.createElement("div");
+          miniHeader.className = "card-header";
+          miniHeader.tabIndex = 0;
+
+          const miniKey = document.createElement("div");
+          miniKey.className = "key";
+          miniKey.textContent = kk;
+          miniHeader.appendChild(miniKey);
+
+          const miniMeta = document.createElement("div");
+          miniMeta.className = "meta";
+          if (Array.isArray(vv))
+            miniMeta.innerHTML = `<span class="badge">Array • ${vv.length}</span>`;
+          else if (typeof vv === "object" && vv !== null)
+            miniMeta.innerHTML = `<span class="badge">Object</span>`;
+          miniHeader.appendChild(miniMeta);
+
+          const miniChev = document.createElement("button");
+          miniChev.className = "chev";
+          miniChev.setAttribute("aria-expanded", "false");
+          miniChev.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+          miniHeader.appendChild(miniChev);
+
+          const miniContent = document.createElement("div");
+          miniContent.className = "collapse";
+
+          miniChev.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleCollapse(miniContent, miniChev);
+          });
+          miniHeader.addEventListener("click", () => {
+            toggleCollapse(miniContent, miniChev);
+          });
+
+          mini.appendChild(miniHeader);
+
+          // --- Flatten detection logic ---
+          const isFlatObject =
+            typeof vv === "object" &&
+            vv !== null &&
+            !Array.isArray(vv) &&
+            Object.values(vv).every((x) => typeof x !== "object" || x === null);
+
+          if (isFlatObject) {
+            // render all key/value pairs inline (flattened)
+            Object.entries(vv).forEach(([flatKey, flatVal]) => {
+              const line = document.createElement("div");
+              line.className = "keyval-line"; // use flex with space-between
+
+              const keySpan = document.createElement("div");
+              keySpan.className = "key";
+              keySpan.textContent = flatKey; // no colon, optional
+
+              const valSpan = document.createElement("div");
+              valSpan.className = "val";
+              valSpan.textContent = String(flatVal);
+
+              if (
+                String(flatVal).length > 30 &&
+                !String(flatVal).includes(" ")
+              ) {
+                valSpan.classList.add("long");
+              }
+
+              line.appendChild(keySpan);
+              line.appendChild(valSpan);
+              miniContent.appendChild(line);
+            });
+          } else if (Array.isArray(vv)) {
+            // arrays: recurse or flatten if primitive
+            if (vv.every((item) => typeof item !== "object" || item === null)) {
+              const val = document.createElement("div");
+              val.className = "val";
+              val.textContent = vv.join(", ");
+              miniContent.appendChild(val);
+            } else {
+              vv.forEach((item, idx) => {
+                const wrap = document.createElement("div");
+                wrap.className = "nested-card";
+                const label = document.createElement("div");
+                label.className = "meta";
+                label.textContent = `Index ${idx}`;
+                wrap.appendChild(label);
+                if (typeof item === "object" && item !== null) {
+                  createModernViewForParent(wrap, item);
+                } else {
+                  const vvEl = document.createElement("div");
+                  vvEl.className = "val";
+                  vvEl.textContent = String(item);
+                  wrap.appendChild(vvEl);
+                }
+                miniContent.appendChild(wrap);
+              });
+            }
+          } else if (typeof vv === "object" && vv !== null) {
+            // nested object (non-flat): recurse
+            createModernViewForParent(miniContent, vv);
+          } else {
+            // primitive value
+            const vvEl = document.createElement("div");
+            vvEl.className = "val";
+            vvEl.textContent = String(vv);
+            miniContent.appendChild(vvEl);
+            miniChev.style.visibility = "hidden";
+          }
+
+          mini.appendChild(miniContent);
+          parent.appendChild(mini);
+        });
+      }
+
+      // toggle function sets aria-expanded and class open + animates max-height
+      function toggleCollapse(el, button) {
+        const isOpen = el.classList.contains("open");
+        if (isOpen) {
+          // collapse: set max-height to current height then to 0 for smooth reverse
+          const prev = el.scrollHeight;
+          el.style.maxHeight = prev + "px";
+          requestAnimationFrame(() => {
+            el.style.maxHeight = "0px";
+          });
+          el.classList.remove("open");
+          button.setAttribute("aria-expanded", "false");
+        } else {
+          // open: set to measured height
+          el.classList.add("open");
+          const target = el.scrollHeight;
+          el.style.maxHeight = target + "px";
+          button.setAttribute("aria-expanded", "true");
+          // remove explicit max-height after transition to allow internal growth
+          el.addEventListener("transitionend", function te() {
+            el.style.maxHeight = "";
+            el.removeEventListener("transitionend", te);
+          });
+        }
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const b64 = params.get("key");
+      const modernContainer = document.getElementById("modern-view");
+      const rawPanel = document.getElementById("raw");
+      const status = document.getElementById("status");
+      const searchInput = document.getElementById("search");
+      const copyBtn = document.getElementById("copy-btn");
+      const downloadBtn = document.getElementById("download-btn");
+      const toggleRaw = document.getElementById("toggle-raw");
+
+      let lastJson = null;
+      function setStatus(msg, isError) {
+        status.textContent = msg;
+        status.className = isError ? "error" : "muted";
+      }
+
+      function showJson(json) {
+        lastJson = json;
+        createModernView(modernContainer, json);
+        rawPanel.innerHTML = syntaxHighlight(json);
+        setStatus(
+          "Decoded • Top-level keys: " + Object.keys(json || {}).length
+        );
+      }
+
+      function tryDecodeAndRender(b64str) {
+        if (!b64str) {
+          setStatus("Waiting for ?key=...");
+          return;
+        }
+        try {
+          const decoded = base64ToString(b64str);
+          try {
+            const parsed = JSON.parse(decoded);
+            showJson(parsed);
+          } catch (err) {
+            rawPanel.style.display = "block";
+            rawPanel.textContent = decoded;
+            setStatus("Decoded (not JSON)");
+          }
+        } catch (e) {
+          rawPanel.style.display = "block";
+          rawPanel.textContent = "❌ Invalid Base64";
+          setStatus("Invalid Base64", true);
+        }
+      }
+
+      toggleRaw.addEventListener("click", () => {
+        rawPanel.style.display =
+          rawPanel.style.display === "none" ? "block" : "none";
+      });
+
+      copyBtn.addEventListener("click", () => {
+        if (!lastJson) return setStatus("Nothing to copy", true);
+        navigator.clipboard
+          .writeText(JSON.stringify(lastJson, null, 2))
+          .then(() => setStatus("Copied JSON to clipboard"))
+          .catch(() => setStatus("Copy failed", true));
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        if (!lastJson) return setStatus("Nothing to download", true);
+        const blob = new Blob([JSON.stringify(lastJson, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "dpp.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setStatus("Download started");
+      });
+
+      searchInput.addEventListener("input", () => {
+        const term = searchInput.value.trim().toLowerCase();
+        if (!term) {
+          Array.from(modernContainer.children).forEach(
+            (c) => (c.style.display = "flex")
+          );
+          return;
+        }
+        Array.from(modernContainer.children).forEach((card) => {
+          const text = card.textContent.toLowerCase();
+          card.style.display = text.includes(term) ? "flex" : "none";
+        });
+      });
+
+      if (b64) {
+        tryDecodeAndRender(b64);
+      }
+      window.addEventListener("paste", (e) => {
+        const pasted = (e.clipboardData || window.clipboardData).getData(
+          "text"
+        );
+        if (!params.get("key") && /^[A-Za-z0-9-_\s=]{20,}$/.test(pasted)) {
+          tryDecodeAndRender(pasted.trim());
+        }
+      });
+    </script>
+  </body>
+</html>
